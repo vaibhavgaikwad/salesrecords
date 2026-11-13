@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#075e54" />
+  <title>Expense Chat</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="chat-header">
+      <div class="header-info">
+        <h1>Expense Tracker</h1>
+        <span class="status-text" id="status-text">Online • Google Sheets</span>
+      </div>
+      <div class="user-selector">
+        <label for="user-select">👤</label>
+        <select id="user-select" aria-label="Select User">
+          <option value="Vaibhav">Vaibhav</option>
+          <option value="Aishwarya">Aishwarya</option>
+        </select>
+      </div>
+    </header>
+
+    <!-- Chat History -->
+    <main class="chat-messages" id="chat-messages">
+      <div class="message bot">
+        <div class="bubble">
+          👋 Ready! Send an expense like:<br>
+          <strong>Medical Paracetamol 250</strong><br><br>
+          Or try commands:<br>
+          • <em>Total Medical</em><br>
+          • <em>Total Kirana</em><br>
+          • <em>Today's Total</em><br>
+          • <em>Summary</em>
+        </div>
+        <span class="meta">System</span>
+      </div>
+    </main>
+
+    <!-- Quick Command Chips -->
+    <div class="quick-commands">
+      <button type="button" data-cmd="Today's Total">Today's Total</button>
+      <button type="button" data-cmd="Summary">Summary</button>
+      <button type="button" data-cmd="Total Medical">Total Medical</button>
+      <button type="button" data-cmd="Total Kirana">Total Kirana</button>
+    </div>
+
+    <!-- Input Bar -->
+    <form class="chat-input-bar" id="chat-form">
+      <input 
+        type="text" 
+        id="message-input" 
+        placeholder="e.g. Kirana Milk 65..." 
+        autocomplete="off" 
+        required 
+      />
+      <button type="button" id="mic-btn" class="icon-btn mic-btn" aria-label="Voice Input" title="Voice Input">
+        🎤
+      </button>
+      <button type="submit" id="send-btn" class="icon-btn send-btn" aria-label="Send" title="Send">
+        ➤
+      </button>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
