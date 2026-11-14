@@ -1,159 +1,275 @@
-// ==========================================
-// CONFIGURATION
-// ==========================================
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxC_YMeGoCXkNbGOnFTJoGQE5XHYGJNos5dbHY5j_R5rmA5DIspK0kowQ3_RSjAqXRLfg/exec';
+/**
+ * SalesChat PWA - Client Application Logic
+ * Handles NLP-lite command/sale parsing, RBAC enforcement,
+ * Web Speech API voice automation, Dark Mode, and Google Apps Script sync.
+ */
 
-// DOM Elements
-const chatForm = document.getElementById('chat-form');
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxWl8n26-1LuGebk4Pd5Bna1TeV1KX9xMicmQw7zsxdBtOYA6WElir1D6gzgsXK1PI4AQ/exec';
+
+// DOM References
+const chatFeed = document.getElementById('chat-feed');
+const composerForm = document.getElementById('composer-form');
 const messageInput = document.getElementById('message-input');
-const chatMessages = document.getElementById('chat-messages');
-const micBtn = document.getElementById('mic-btn');
+const voiceBtn = document.getElementById('voice-btn');
+const roleSelect = document.getElementById('role-select');
 const userSelect = document.getElementById('user-select');
-const statusText = document.getElementById('status-text');
+const themeToggle = document.getElementById('theme-toggle');
+const connectionStatus = document.getElementById('connection-status');
 
-// Persist selected user across reloads
-const savedUser = localStorage.getItem('expense_chat_user');
-if (savedUser) userSelect.value = savedUser;
-userSelect.addEventListener('change', () => {
-  localStorage.setItem('expense_chat_user', userSelect.value);
+// Application State
+const state = {
+  role: localStorage.getItem('saleschat_role') || 'admin',
+  userName: localStorage.getItem('saleschat_user') || 'Vaibhav',
+  darkMode: localStorage.getItem('saleschat_dark') === 'true'
+};
+
+// Initialize UI State
+function initApp() {
+  roleSelect.value = state.role;
+  userSelect.value = state.userName;
+  applyTheme(state.darkMode);
+  applyRolePermissions();
+
+  appendMessage(
+    `👋 Welcome, ${state.userName} (${state.role.toUpperCase()}).\n\n` +
+    `Record a sale by typing or speaking:\n` +
+    `• Medical Dolo650 120\n` +
+    `• Kirana Rice 500\n\n` +
+    `Or run a report command:\n` +
+    `• Total Medical\n` +
+    `• Today's Total\n` +
+    `• Sales Today Medical\n` +
+    (state.role === 'admin' ? `• Summary\n• Monthly Summary` : ''),
+    'bot',
+    'System'
+  );
+}
+
+/* ==================== THEME & ROLE MANAGEMENT ==================== */
+
+function applyTheme(isDark) {
+  document.body.classList.toggle('dark-mode', isDark);
+  themeToggle.textContent = isDark ? '☀️' : '🌙';
+  localStorage.setItem('saleschat_dark', isDark);
+}
+
+themeToggle.addEventListener('click', () => {
+  state.darkMode = !state.darkMode;
+  applyTheme(state.darkMode);
 });
 
-// ==========================================
-// UI HELPERS
-// ==========================================
-function appendMessage(text, sender = 'user', metaText = '') {
-  const wrapper = document.createElement('div');
-  wrapper.className = `message ${sender}`;
+function applyRolePermissions() {
+  const adminChips = document.querySelectorAll('.cmd-chip.admin-only');
+  adminChips.forEach(chip => {
+    chip.classList.toggle('hidden', state.role !== 'admin');
+  });
+}
+
+roleSelect.addEventListener('change', () => {
+  state.role = roleSelect.value;
+  localStorage.setItem('saleschat_role', state.role);
+  applyRolePermissions();
+  appendMessage(
+    `🔄 Switched role to ${state.role === 'admin' ? 'Admin (All records & summaries)' : 'Sales User (Own totals only)'}.`,
+    'bot',
+    'System'
+  );
+});
+
+userSelect.addEventListener('change', () => {
+  state.userName = userSelect.value;
+  localStorage.setItem('saleschat_user', state.userName);
+  appendMessage(`👤 Active user set to ${state.userName}.`, 'bot', 'System');
+});
+
+/* ==================== CHAT RENDERING ==================== */
+
+function appendMessage(text, sender = 'user', label = '') {
+  const row = document.createElement('div');
+  row.className = `msg-row ${sender}`;
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.textContent = text;
 
   const meta = document.createElement('span');
-  meta.className = 'meta';
-  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  meta.textContent = metaText ? `${metaText} • ${time}` : time;
+  meta.className = 'msg-meta';
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  meta.textContent = label ? `${label} • ${timeStr}` : timeStr;
 
-  wrapper.appendChild(bubble);
-  wrapper.appendChild(meta);
-  chatMessages.appendChild(wrapper);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  row.appendChild(bubble);
+  row.appendChild(meta);
+  chatFeed.appendChild(row);
+  chatFeed.scrollTop = chatFeed.scrollHeight;
+
   return bubble;
 }
 
-// Quick command buttons
-document.querySelectorAll('.quick-commands button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    handleUserInput(btn.dataset.cmd);
-  });
-});
+/* ==================== MESSAGE & COMMAND PARSER ==================== */
 
-// ==========================================
-// INPUT PARSING & COMMAND ROUTING
-// ==========================================
-chatForm.addEventListener('submit', (e) => {
+composerForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const text = messageInput.value.trim();
-  if (!text) return;
+  const raw = messageInput.value.trim();
+  if (!raw) return; // Security: Prevent empty messages
   messageInput.value = '';
-  handleUserInput(text);
+  processUserMessage(raw);
 });
 
-async function handleUserInput(rawText) {
-  const currentUser = userSelect.value;
-  appendMessage(rawText, 'user', currentUser);
-
-  const lower = rawText.toLowerCase().trim();
-
-  // Check if input is a Query Command
-  const isCommand =
-    lower === "today's total" ||
-    lower === "todays total" ||
-    lower === "today total" ||
-    lower === "summary" ||
-    lower.startsWith("total ");
-
-  if (isCommand) {
-    await executeCommand(rawText);
-    return;
-  }
-
-  // Otherwise, parse as an Expense Entry: "<ShopName> <Product...> <Amount>"
-  // Example: "Medical Paracetamol 250" or "Kirana Toor Dal 180.50"
-  const parts = rawText.trim().split(/\s+/);
-  const amount = parseFloat(parts[parts.length - 1]);
-
-  if (parts.length < 3 || isNaN(amount)) {
-    appendMessage(
-      '⚠️ Invalid format.\nUse: ShopName Product Amount\nExample: Medical Paracetamol 250\n\nOr use a command: Summary, Today\'s Total, Total Medical',
-      'bot',
-      'Bot'
-    );
-    return;
-  }
-
-  const shopName = capitalize(parts[0]);
-  const product = parts.slice(1, -1).join(' ');
-
-  await saveExpense({
-    shopName,
-    product,
-    amount,
-    user: currentUser
+document.querySelectorAll('.cmd-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    processUserMessage(btn.dataset.cmd);
   });
+});
+
+async function processUserMessage(rawText) {
+  const cleanText = rawText.trim();
+  if (!cleanText) return;
+
+  appendMessage(cleanText, 'user', `${state.userName} (${state.role})`);
+
+  const lower = cleanText.toLowerCase();
+
+  // Check if message matches a supported reporting command
+  if (isCommandQuery(lower)) {
+    // Client-side RBAC guard before hitting network
+    if ((lower === 'summary' || lower === 'monthly summary') && state.role !== 'admin') {
+      appendMessage('🔒 Access Denied: Only Admin users can view Summary and Monthly Summary reports.', 'bot', 'SalesBot');
+      return;
+    }
+    await sendCommandRequest(cleanText);
+    return;
+  }
+
+  // Otherwise parse as Sale Record: <ShopName> <ProductName...> <Amount>
+  const parsedSale = parseSaleEntry(cleanText);
+
+  if (!parsedSale.valid) {
+    appendMessage(parsedSale.error, 'bot', 'SalesBot');
+    return;
+  }
+
+  await sendSaleRecord(parsedSale.data);
 }
 
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+function isCommandQuery(lowerText) {
+  return (
+    lowerText === "today's total" ||
+    lowerText === "todays total" ||
+    lowerText === "today total" ||
+    lowerText === "summary" ||
+    lowerText === "monthly summary" ||
+    lowerText.startsWith("total ") ||
+    lowerText.startsWith("sales today ")
+  );
 }
 
-// ==========================================
-// GOOGLE SHEETS API COMMUNICATION
-// ==========================================
-async function saveExpense(payload) {
-  const loadingBubble = appendMessage('⏳ Saving to Google Sheets...', 'bot', 'Bot');
+/**
+ * Extracts ShopName, ProductName, and validates numeric Amount.
+ * Example: "Medical Dolo650 120" -> { shopName: "Medical", productName: "Dolo650", amount: 120 }
+ */
+function parseSaleEntry(text) {
+  const tokens = text.split(/\s+/);
+
+  if (tokens.length < 3) {
+    return {
+      valid: false,
+      error: '⚠️ Invalid format or command.\nTo record a sale, enter:\nShopName ProductName Amount\nExample: Medical Dolo650 120'
+    };
+  }
+
+  // Support currency symbols like ₹120 or commas like 1,250
+  const rawAmountToken = tokens[tokens.length - 1].replace(/[₹,]/g, '');
+  const amount = Number(rawAmountToken);
+
+  // Security: Validate amount is strictly numeric and > 0
+  if (!rawAmountToken || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+    return {
+      valid: false,
+      error: `⚠️ Invalid amount "${tokens[tokens.length - 1]}". The last value must be a positive number.\nExample: Medical Paracetamol 250`
+    };
+  }
+
+  const shopName = capitalizeWords(tokens[0]);
+  const productName = tokens.slice(1, -1).join(' ');
+
+  return {
+    valid: true,
+    data: {
+      shopName,
+      productName,
+      amount,
+      userName: state.userName
+    }
+  };
+}
+
+function capitalizeWords(str) {
+  return str.replace(/\b\w/g, char => char.toUpperCase());
+}
+
+/* ==================== GOOGLE APPS SCRIPT API CALLS ==================== */
+
+async function sendSaleRecord(saleData) {
+  if (!isConfigured()) return;
+
+  const botBubble = appendMessage('⏳ Saving sale to Google Sheets...', 'bot', 'SalesBot');
 
   try {
     // text/plain avoids CORS preflight OPTIONS requests on Google Apps Script
-    const response = await fetch(SCRIPT_URL, {
+    const response = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(saleData)
     });
 
     const result = await response.json();
 
     if (result.status === 'success') {
-      loadingBubble.textContent =
-        `✅ Saved!\n` +
-        `🏪 Shop: ${payload.shopName}\n` +
-        `📦 Item: ${payload.product}\n` +
-        `💰 Amount: ₹${payload.amount}\n` +
-        `👤 User: ${payload.user}`;
+      const formattedAmt = Number(result.record.amount).toLocaleString('en-IN');
+      botBubble.textContent =
+        `✅ Sale Recorded\n` +
+        `Shop: ${result.record.shopName}\n` +
+        `Product: ${result.record.productName}\n` +
+        `Amount: ₹${formattedAmt}\n` +
+        `Time: ${result.record.timestamp}`;
     } else {
-      loadingBubble.textContent = `❌ Failed to save: ${result.message}`;
+      botBubble.textContent = `❌ Error: ${result.message}`;
     }
   } catch (err) {
-    loadingBubble.textContent = '❌ Network error. Check your internet or Apps Script URL.';
+    botBubble.textContent = '❌ Network error: Unable to reach Google Sheets backend.';
   }
 }
 
-async function executeCommand(commandText) {
-  const loadingBubble = appendMessage('⏳ Fetching report...', 'bot', 'Bot');
+async function sendCommandRequest(commandText) {
+  if (!isConfigured()) return;
+
+  const botBubble = appendMessage('⏳ Fetching report...', 'bot', 'SalesBot');
 
   try {
-    const url = `${SCRIPT_URL}?command=${encodeURIComponent(commandText)}`;
-    const response = await fetch(url);
+    const queryParams = new URLSearchParams({
+      command: commandText,
+      role: state.role,
+      userName: state.userName
+    });
+
+    const response = await fetch(`${APPS_SCRIPT_URL}?${queryParams.toString()}`);
     const result = await response.json();
-    loadingBubble.textContent = result.reply;
+    botBubble.textContent = result.reply || result.message || 'No response received.';
   } catch (err) {
-    loadingBubble.textContent = '❌ Could not fetch data from Google Sheets.';
+    botBubble.textContent = '❌ Network error: Could not retrieve report from Google Sheets.';
   }
 }
 
-// ==========================================
-// VOICE INPUT (WEB SPEECH API)
-// ==========================================
+function isConfigured() {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR_GOOGLE_APPS_SCRIPT')) {
+    appendMessage('⚙️ Setup Required: Please paste your Google Apps Script Web App URL into app.js.', 'bot', 'System');
+    return false;
+  }
+  return true;
+}
+
+/* ==================== WEB SPEECH API (VOICE INPUT) ==================== */
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 if (SpeechRecognition) {
@@ -162,45 +278,60 @@ if (SpeechRecognition) {
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
 
-  micBtn.addEventListener('click', () => {
-    if (micBtn.classList.contains('listening')) {
+  let isListening = false;
+
+  voiceBtn.addEventListener('click', () => {
+    if (isListening) {
       recognition.stop();
     } else {
-      recognition.start();
+      try {
+        recognition.start();
+      } catch (e) {
+        console.warn('Speech recognition already active:', e);
+      }
     }
   });
 
   recognition.onstart = () => {
-    micBtn.classList.add('listening');
-    statusText.textContent = 'Listening... Speak now';
+    isListening = true;
+    voiceBtn.classList.add('listening');
+    connectionStatus.textContent = '🎙️ Listening... Speak now';
   };
 
   recognition.onresult = (event) => {
     let transcript = event.results[0][0].transcript;
-    // Strip trailing period that mobile speech keyboards often add
-    transcript = transcript.replace(/\.$/, '').trim();
-    messageInput.value = transcript;
-    handleUserInput(transcript);
+    // Clean trailing punctuation added by speech engines (e.g., "Medical Dolo 650 120.")
+    transcript = transcript.replace(/[.?!]+$/, '').trim();
+    if (transcript) {
+      processUserMessage(transcript); // Automatically submit recognized text
+    }
   };
 
   recognition.onerror = (event) => {
-    statusText.textContent = 'Voice error: ' + event.error;
-    setTimeout(() => { statusText.textContent = 'Online • Google Sheets'; }, 2500);
+    connectionStatus.textContent = `Voice error: ${event.error}`;
+    setTimeout(() => {
+      connectionStatus.textContent = 'Ready • Google Sheets';
+    }, 2500);
   };
 
   recognition.onend = () => {
-    micBtn.classList.remove('listening');
-    statusText.textContent = 'Online • Google Sheets';
+    isListening = false;
+    voiceBtn.classList.remove('listening');
+    connectionStatus.textContent = 'Ready • Google Sheets';
   };
 } else {
-  micBtn.style.display = 'none';
+  voiceBtn.style.display = 'none';
 }
 
-// ==========================================
-// PWA SERVICE WORKER REGISTRATION
-// ==========================================
+/* ==================== SERVICE WORKER REGISTRATION ==================== */
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW error:', err));
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.warn('Service Worker registration failed:', err);
+    });
   });
 }
+
+// Start App
+initApp();
