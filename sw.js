@@ -1,4 +1,4 @@
-const CACHE_NAME = 'saleschat-pro-v2';
+const CACHE_NAME = 'saleschat-pro-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -27,7 +27,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = event.request.url;
 
-  // Always bypass Service Worker cache for Google Apps Script API calls
   if (url.includes('script.google.com') || url.includes('script.googleusercontent.com')) {
     return;
   }
