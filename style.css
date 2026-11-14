@@ -107,11 +107,30 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .brand-meta h1 {
   font-size: 0.98rem;
   font-weight: 600;
+}
+
+.store-pill {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.store-pill.unset {
+  background-color: var(--warning);
+  color: #111b21;
+  border-color: var(--warning);
 }
 
 .sync-badge {
@@ -130,6 +149,7 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
 .header-controls {
@@ -227,7 +247,7 @@ html, body {
   text-align: right;
 }
 
-/* Shop Dropdown Suggestions */
+/* Store Suggestions */
 .shop-suggestions {
   display: flex;
   gap: 6px;
@@ -241,8 +261,8 @@ html, body {
   background-color: var(--accent);
   color: #ffffff;
   border: none;
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: 5px 11px;
+  border-radius: 14px;
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
