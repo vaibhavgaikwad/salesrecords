@@ -9,7 +9,6 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3144/3144456.png" />
   <link rel="stylesheet" href="style.css" />
-  <!-- Chart.js CDN for Admin Analytics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
@@ -21,9 +20,12 @@
         <div class="brand-meta">
           <div class="title-row">
             <h1>SalesChat</h1>
+            <button type="button" id="active-store-btn" class="store-pill" title="Tap to change active store">
+              🏪 Set Store
+            </button>
             <span id="sync-badge" class="sync-badge hidden" title="Pending offline records">0 queued</span>
           </div>
-          <span id="connection-status" class="status">Online • Synced</span>
+          <span id="connection-status" class="status">Online • Google Sheets</span>
         </div>
       </div>
 
@@ -56,8 +58,8 @@
     <!-- Chat Messages Viewport -->
     <main id="chat-feed" class="chat-feed" aria-live="polite"></main>
 
-    <!-- Dynamic Shop Autocomplete Suggestions -->
-    <div id="shop-suggestions" class="shop-suggestions hidden" role="listbox" aria-label="Shop suggestions"></div>
+    <!-- Dynamic Store Suggestions (Shown during Store Setup or Switching) -->
+    <div id="shop-suggestions" class="shop-suggestions hidden" role="listbox" aria-label="Store suggestions"></div>
 
     <!-- Quick Action Command Strip -->
     <nav id="command-bar" class="command-bar" aria-label="Quick Commands">
@@ -75,11 +77,11 @@
         <input
           type="text"
           id="message-input"
-          placeholder="Type 'Medical Dolo650 120' or command..."
+          placeholder="Enter store name first..."
           autocomplete="off"
           enterkeyhint="send"
         />
-        <button type="button" id="voice-btn" class="action-btn voice-btn" aria-label="Voice Input" title="Speak Sale or Command">
+        <button type="button" id="voice-btn" class="action-btn voice-btn" aria-label="Voice Input" title="Speak Store, Sale, or Command">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
           </svg>
@@ -109,7 +111,6 @@
       </div>
 
       <div class="modal-body">
-        <!-- KPI Summary Cards -->
         <div class="kpi-grid">
           <div class="kpi-card">
             <span class="kpi-label">Today's Sales</span>
@@ -129,7 +130,6 @@
           </div>
         </div>
 
-        <!-- Charts Grid -->
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Shop-Wise Share</h3>
