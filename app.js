@@ -1,12 +1,13 @@
 /**
- * SalesChat Pro v2.2
- * - Asks for Store Name on first launch and saves all subsequent entries under that store.
- * - Supports amount-only ("250"), product + amount ("Paracetamol 250"), and explicit store override ("Kirana Sugar 300").
- * - Silent sale recording (no bot reply bubbles on entry).
+ * SalesChat Pro v2.3
+ * - Asks for Store Name first on startup and records all entries under that store.
+ * - Accepts amount-only ("250") or product + amount ("Paracetamol 250") with zero validation friction.
+ * - Silent recording (no bot reply bubble when saving sales).
  */
 
 const CONFIG = Object.freeze({
   APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyPovdOZCjYuGR8VNwFzmBjq4bkCsVWtN5dnYETCz7vwoMHVLaskB7CKF0EsY5s0sL5sw/exec',
+  APP_VERSION: 'v2.3',
   CACHE_TTL_MS: 60 * 1000,
   REQUEST_TIMEOUT_MS: 12000,
   DEFAULT_SHOPS: ['Medical', 'Kirana', 'Stationery', 'General']
@@ -146,7 +147,7 @@ class ApiGateway {
   }
 }
 
-/* ==================== 3. STORE-AWARE COMMAND & SALE PARSER ==================== */
+/* ==================== 3. STORE-AWARE PARSER (NO VALIDATION FRICTION) ==================== */
 class DomainParser {
   static normalizeVoiceNumbers(text) {
     const wordMap = {
@@ -167,7 +168,7 @@ class DomainParser {
 
     const lower = clean.toLowerCase();
 
-    // 1. Report Commands (Work anytime)
+    // 1. Report Commands
     if (/^(today'?s?\s+total|total\s+today)$/i.test(lower)) {
       return { type: 'COMMAND', command: "Today's Total", adminOnly: false };
     }
@@ -205,13 +206,12 @@ class DomainParser {
       };
     }
 
-    // 3. Sale Parsing (Supports: "250", "Paracetamol 250", or "Kirana Sugar 300")
+    // 3. Amount-Only or Product + Amount Parsing
     const tokens = clean.split(' ');
     const rawLastToken = tokens[tokens.length - 1].replace(/[₹,]/g, '');
     const amount = Number(rawLastToken);
 
     if (rawLastToken !== '' && !isNaN(amount) && isFinite(amount)) {
-      // If activeStore is not yet set, ask user for store name first (unless they typed "StoreName Product Amount")
       if (!activeStore && tokens.length < 3) {
         return { type: 'NEED_STORE', pendingText: clean };
       }
@@ -220,10 +220,10 @@ class DomainParser {
       let productName = '-';
 
       if (tokens.length === 1) {
-        // Amount only: "250" -> uses activeStore, product "-"
+        // Amount only: e.g. "250"
         productName = '-';
       } else if (tokens.length === 2) {
-        // Two tokens: either "<KnownStore> 250" or "<Product> 250"
+        // e.g. "Paracetamol 250" or "Kirana 250"
         const firstWordCap = this.capitalize(tokens[0]);
         const isKnownShop = knownShops.some(s => s.toLowerCase() === tokens[0].toLowerCase());
         if (isKnownShop && firstWordCap.toLowerCase() !== shopName.toLowerCase()) {
@@ -233,7 +233,7 @@ class DomainParser {
           productName = firstWordCap;
         }
       } else {
-        // 3+ tokens: check if first token is an explicit different store or part of product name
+        // 3+ tokens: e.g. "Dolo 650 120" or "Kirana Sugar 300"
         const firstWordCap = this.capitalize(tokens[0]);
         const isKnownShop = knownShops.some(s => s.toLowerCase() === tokens[0].toLowerCase());
         if (isKnownShop) {
@@ -256,7 +256,7 @@ class DomainParser {
       };
     }
 
-    // 4. If awaiting initial store setup, treat plain text (e.g., "Medical") as the store name
+    // 4. First-time store setup: any plain text sets the active store
     if (!activeStore) {
       return {
         type: 'SET_STORE',
@@ -264,10 +264,7 @@ class DomainParser {
       };
     }
 
-    return {
-      type: 'INVALID',
-      error: `❓ Enter an amount (e.g. 250) or product & amount (e.g. Paracetamol 250) for ${activeStore}.`
-    };
+    return { type: 'IGNORE' };
   }
 
   static capitalize(str) {
@@ -518,7 +515,6 @@ class ChatAppController {
     this.syncShopCatalog();
     this.flushOfflineOutbox();
 
-    // First-time Store Prompt
     if (!this.state.activeStore) {
       this.promptForStore(
         '🏪 Welcome! Which store are you recording sales for?\n(Type or tap a store name like Medical or Kirana)'
@@ -546,12 +542,11 @@ class ChatAppController {
     this.hideShopSuggestions();
 
     this.appendMessage(
-      `✅ Active Store set to ${formatted}.\nNow send amounts (e.g. 250) or product & amount (e.g. Paracetamol 250).`,
+      `✅ Store: ${formatted}\nSend amount (e.g. 250) or item & amount (e.g. Paracetamol 250).`,
       'bot',
       'Store'
     );
 
-    // If user had typed an amount before setting the store, record it immediately
     if (this.state.pendingSaleText) {
       const queuedEntry = this.state.pendingSaleText;
       this.state.pendingSaleText = '';
@@ -581,7 +576,6 @@ class ChatAppController {
       this.handleUserText(val);
     });
 
-    // Clicking the Store pill in the header lets the user switch stores anytime
     this.dom.storeBtn.addEventListener('click', () => {
       this.promptForStore('🏪 Switch store — enter or tap the store name:');
     });
@@ -658,7 +652,9 @@ class ChatAppController {
   }
 
   updateConnectivityUI() {
-    this.dom.status.textContent = navigator.onLine ? 'Online • Google Sheets' : 'Offline • Local Queue Mode';
+    this.dom.status.textContent = navigator.onLine
+      ? `Online (${CONFIG.APP_VERSION})`
+      : 'Offline • Local Queue Mode';
   }
 
   updateOutboxBadge() {
@@ -717,7 +713,6 @@ class ChatAppController {
 
     this.appendMessage(clean, 'user', this.state.userName);
 
-    // If user clicked the Store pill to switch stores and typed a store name (not a number/command)
     if (this.state.awaitingStoreSwitch && isNaN(Number(clean.replace(/[₹,]/g, '')))) {
       const quickCheck = DomainParser.parse(clean, this.state.userName, this.state.activeStore, this.storage.getKnownShops());
       if (quickCheck.type !== 'COMMAND') {
@@ -747,11 +742,6 @@ class ChatAppController {
       return;
     }
 
-    if (parsed.type === 'INVALID') {
-      this.appendMessage(parsed.error, 'bot', 'SalesBot');
-      return;
-    }
-
     if (parsed.type === 'COMMAND') {
       if (parsed.adminOnly && this.state.role !== 'admin') {
         this.appendMessage('🔒 Access Denied: Admin role required for this report.', 'bot', 'SalesBot');
@@ -767,9 +757,6 @@ class ChatAppController {
     }
   }
 
-  /**
-   * Saves sale under the active store silently without posting a bot reply bubble
-   */
   async recordSaleSilently(payload) {
     if (!this.api.isConfigured) {
       this.dom.status.textContent = '⚠️ Configure APPS_SCRIPT_URL in app.js';
