@@ -4,40 +4,50 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#075e54" />
-  <meta name="description" content="Chat and voice-driven sales record management PWA" />
-  <title>SalesChat • Record Manager</title>
+  <meta name="description" content="Offline-first chat and voice sales management PWA" />
+  <title>SalesChat Pro</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3144/3144456.png" />
   <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js CDN for Admin Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
-    <!-- Top Navigation Bar -->
+    <!-- Top Header -->
     <header class="chat-header">
       <div class="brand">
         <div class="avatar">📊</div>
         <div class="brand-meta">
-          <h1>SalesChat</h1>
-          <span id="connection-status" class="status">Ready • Google Sheets</span>
+          <div class="title-row">
+            <h1>SalesChat</h1>
+            <span id="sync-badge" class="sync-badge hidden" title="Pending offline records">0 queued</span>
+          </div>
+          <span id="connection-status" class="status">Online • Synced</span>
         </div>
       </div>
 
       <div class="header-controls">
-        <!-- Role Selector -->
-        <select id="role-select" class="pill-select" aria-label="Select Role" title="User Role">
+        <!-- Admin Dashboard Button (RBAC Controlled) -->
+        <button type="button" id="dashboard-btn" class="icon-circle-btn admin-only" aria-label="Admin Dashboard" title="Admin Analytics Dashboard">
+          📈
+        </button>
+
+        <!-- Role Switcher -->
+        <select id="role-select" class="pill-select" aria-label="User Role">
           <option value="admin">Admin</option>
-          <option value="sales">Sales User</option>
+          <option value="sales">Sales</option>
         </select>
 
-        <!-- Active User Selector -->
-        <select id="user-select" class="pill-select" aria-label="Select User" title="Active User">
+        <!-- User Switcher -->
+        <select id="user-select" class="pill-select" aria-label="Active User">
           <option value="Vaibhav">Vaibhav</option>
           <option value="Aishwarya">Aishwarya</option>
-          <option value="Salesperson 1">Salesperson 1</option>
+          <option value="Salesperson 1">Sales 1</option>
         </select>
 
-        <!-- Dark Mode Toggle -->
-        <button type="button" id="theme-toggle" class="icon-circle-btn" aria-label="Toggle Dark Mode" title="Toggle Dark Mode">
+        <!-- Theme Toggle -->
+        <button type="button" id="theme-toggle" class="icon-circle-btn" aria-label="Toggle Theme" title="Toggle Dark Mode">
           🌙
         </button>
       </div>
@@ -45,6 +55,9 @@
 
     <!-- Chat Messages Viewport -->
     <main id="chat-feed" class="chat-feed" aria-live="polite"></main>
+
+    <!-- Dynamic Shop Autocomplete Suggestions -->
+    <div id="shop-suggestions" class="shop-suggestions hidden" role="listbox" aria-label="Shop suggestions"></div>
 
     <!-- Quick Action Command Strip -->
     <nav id="command-bar" class="command-bar" aria-label="Quick Commands">
@@ -78,6 +91,61 @@
         </button>
       </form>
     </footer>
+  </div>
+
+  <!-- Admin Analytics Dashboard Modal -->
+  <div id="dashboard-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="dash-title">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2 id="dash-title">Admin Analytics Dashboard</h2>
+          <p class="modal-subtitle">Real-time sales intelligence & exports</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="refresh-dash-btn" class="secondary-btn" title="Refresh Data">🔄</button>
+          <button type="button" id="export-csv-btn" class="primary-btn">⬇ CSV</button>
+          <button type="button" id="close-dash-btn" class="icon-close-btn" aria-label="Close Dashboard">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <!-- KPI Summary Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Today's Sales</span>
+            <strong id="kpi-today" class="kpi-value">₹0</strong>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">This Month</span>
+            <strong id="kpi-month" class="kpi-value">₹0</strong>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Grand Total</span>
+            <strong id="kpi-grand" class="kpi-value">₹0</strong>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Transactions</span>
+            <strong id="kpi-count" class="kpi-value">0</strong>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Shop-Wise Share</h3>
+            <div class="chart-wrap">
+              <canvas id="shop-chart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Monthly Revenue Trend</h3>
+            <div class="chart-wrap">
+              <canvas id="monthly-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
